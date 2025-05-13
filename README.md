@@ -224,6 +224,20 @@ The container can be integrated with other services like Nginx Proxy Manager or 
 
 4. **Permission issues**: Ensure proper PUID/PGID settings in the environment variables
 
+5. **No internet access through VPN**: Several things to check:
+   - Make sure the container is running in privileged mode or with `--cap-add NET_ADMIN`
+   - Try using `network_mode: host` in your docker-compose.yml
+   - Verify IP forwarding is enabled on the host: `sysctl net.ipv4.ip_forward`
+   - Check iptables NAT rules: `iptables -t nat -L -v`
+   - Ensure the client configuration has `AllowedIPs = 0.0.0.0/0, ::/0` to route all traffic
+   - For manual fix, run these commands on the host:
+
+     ```bash
+     sudo iptables -t nat -A POSTROUTING -s 10.0.0.0/24 -o eth0 -j MASQUERADE
+     sudo iptables -A FORWARD -i wg0 -j ACCEPT
+     sudo iptables -A FORWARD -o wg0 -j ACCEPT
+     ```
+
 ### Logs
 
 To view container logs:

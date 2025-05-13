@@ -26,7 +26,8 @@ services:
       - "${WG_PORT:-51820}:51820/udp"
       - "${WG_DASHBOARD_PORT:-10086}:10086/tcp"
     restart: unless-stopped
-    privileged: true  # Required for wireguard kernel module
+    privileged: true  # Required for wireguard kernel module and network changes
+    network_mode: host  # Use host network for better connectivity
     sysctls:
       - net.ipv4.ip_forward=1
       - net.ipv4.conf.all.src_valid_mark=1
