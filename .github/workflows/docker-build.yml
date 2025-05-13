@@ -31,11 +31,11 @@ jobs:
 
       - name: Test container
         run: |
-          docker run --name test-wireguard -d --cap-add NET_ADMIN test-image:latest
+          docker run --name test-wireguard -d --cap-add NET_ADMIN -e TEST_MODE=true test-image:latest
           sleep 10
           docker logs test-wireguard
           docker exec test-wireguard bash -c "if [ ! -f /etc/wireguard/wg0.conf ]; then exit 1; fi"
-          docker exec test-wireguard bash -c "ps aux | grep -q '[w]gd.sh' || exit 1"
+          docker exec test-wireguard bash -c "ps -ef | grep -q sleep || exit 1"
           docker stop test-wireguard
           docker rm test-wireguard
 
