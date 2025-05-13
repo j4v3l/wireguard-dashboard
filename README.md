@@ -62,35 +62,35 @@ version: '3'
 
 services:
   wireguard:
-    image: j4v3l/wireguard-dashboard:latest
+    image: j4v3l/wireguard-dashboard:beta
     container_name: wireguard
     cap_add:
       - NET_ADMIN
       - SYS_MODULE
     environment:
-      - TZ=UTC
-      - PUID=1000
-      - PGID=1000
-      - WG_HOST=auto
-      - WG_PORT=51820
-      - WG_DASHBOARD_PORT=10086
-      - WG_DASHBOARD_HOST=0.0.0.0
-      - WG_ALLOWED_IPS=0.0.0.0/0, ::/0
-      - WG_PERSISTENT_KEEPALIVE=25
-      - AUTO_UPDATE=false
-      - UPDATE_DASHBOARD=false
+      - TZ=${TZ:-UTC}
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - WG_HOST=${WG_HOST:-auto}  # Server's public IP, 'auto' for automatic detection
+      - WG_PORT=${WG_PORT:-51820}  # WireGuard port
+      - WG_DASHBOARD_PORT=${WG_DASHBOARD_PORT:-10086}  # WGDashboard web interface port
+      - WG_DASHBOARD_HOST=${WG_DASHBOARD_HOST:-0.0.0.0}  # WGDashboard bind address
+      - WG_ALLOWED_IPS=${WG_ALLOWED_IPS:-0.0.0.0/0, ::/0}  # Allowed IPs for clients
+      - WG_PERSISTENT_KEEPALIVE=${WG_PERSISTENT_KEEPALIVE:-25}  # KeepAlive interval
+      - WG_DNS_SERVERS=${WG_DNS_SERVERS:-1.1.1.1,8.8.8.8}  # DNS servers for clients
+      - AUTO_UPDATE=${AUTO_UPDATE:-false}  # Enable automatic updates of packages
+      - UPDATE_DASHBOARD=${UPDATE_DASHBOARD:-false}  # Enable automatic updates of WGDashboard
     volumes:
       - ./config:/etc/wireguard
       - ./dashboard-data:/opt/WGDashboard/src/db
     ports:
-      - "51820:51820/udp"
-      - "10086:10086/tcp"
+      - "${WG_PORT:-51820}:51820/udp"
+      - "${WG_DASHBOARD_PORT:-10086}:10086/tcp"
     restart: unless-stopped
-    privileged: true
+    privileged: true  # Required for wireguard kernel module and network changes
     sysctls:
       - net.ipv4.ip_forward=1
-      - net.ipv4.conf.all.src_valid_mark=1
-      - net.ipv6.conf.all.forwarding=1
+      - net.ipv6.conf.all.forwarding=1 
 ```
 
 2. Start the container:

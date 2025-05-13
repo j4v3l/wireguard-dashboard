@@ -2,7 +2,7 @@ version: '3'
 
 services:
   wireguard:
-    image: wireguard-dashboard:test
+    image: j4v3l/wireguard-dashboard:beta
     container_name: wireguard
     cap_add:
       - NET_ADMIN
@@ -17,6 +17,9 @@ services:
       - WG_DASHBOARD_HOST=${WG_DASHBOARD_HOST:-0.0.0.0}  # WGDashboard bind address
       - WG_ALLOWED_IPS=${WG_ALLOWED_IPS:-0.0.0.0/0, ::/0}  # Allowed IPs for clients
       - WG_PERSISTENT_KEEPALIVE=${WG_PERSISTENT_KEEPALIVE:-25}  # KeepAlive interval
+      - WG_DNS_SERVERS=${WG_DNS_SERVERS:-1.1.1.1,8.8.8.8}  # DNS servers for clients
+      - WG_MTU=${WG_MTU:-1420}  # MTU size for the VPN connection
+      - DEBUG=${DEBUG:-false}  # Enable debug logging
       - AUTO_UPDATE=${AUTO_UPDATE:-false}  # Enable automatic updates of packages
       - UPDATE_DASHBOARD=${UPDATE_DASHBOARD:-false}  # Enable automatic updates of WGDashboard
     volumes:
@@ -27,8 +30,6 @@ services:
       - "${WG_DASHBOARD_PORT:-10086}:10086/tcp"
     restart: unless-stopped
     privileged: true  # Required for wireguard kernel module and network changes
-    network_mode: host  # Use host network for better connectivity
     sysctls:
       - net.ipv4.ip_forward=1
-      - net.ipv4.conf.all.src_valid_mark=1
       - net.ipv6.conf.all.forwarding=1 
