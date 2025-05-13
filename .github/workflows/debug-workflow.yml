@@ -8,7 +8,7 @@ permissions: write-all
 
 jobs:
   debug-permissions:
-    runs-on: ubuntu-lates
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -81,7 +81,7 @@ jobs:
           category: 'test'
 
   test-github-release:
-    runs-on: ubuntu-lates
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     if: false  # Set to true only for testing
@@ -98,7 +98,7 @@ jobs:
           draft: true
 
   test-docker-hub:
-    runs-on: ubuntu-lates
+    runs-on: ubuntu-latest
     if: false  # Set to true only for testing
     steps:
       - name: Checkou
