@@ -1,0 +1,117 @@
+---
+name: Debug GitHub Actions
+
+on:
+  workflow_dispatch: {}  # Manual trigger
+
+permissions: write-all
+
+jobs:
+  debug-permissions:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Show repository information
+        run: |
+          echo "Repository: ${{ github.repository }}"
+          echo "Ref: ${{ github.ref }}"
+          echo "Event name: ${{ github.event_name }}"
+          echo "Actor: ${{ github.actor }}"
+
+      - name: Check GitHub Token Permissions
+        run: |
+          echo "Checking GitHub token permissions..."
+          curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+               -H "Accept: application/vnd.github.v3+json" \
+               https://api.github.com/rate_limit
+
+          echo "Can write to contents? ${{ contains(github.token_permissions.contents, 'write') }}"
+          echo "Can write to packages? ${{ contains(github.token_permissions.packages, 'write') }}"
+          echo "Can write to security_events? ${{ contains(github.token_permissions.security_events, 'write') }}"
+
+      - name: Check DockerHub Credentials
+        run: |
+          if [ -n "${{ secrets.DOCKERHUB_USERNAME }}" ]; then
+            echo "DockerHub username is set"
+          else
+            echo "DockerHub username is NOT set"
+          fi
+
+          if [ -n "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
+            echo "DockerHub token is set"
+          else
+            echo "DockerHub token is NOT set"
+          fi
+
+      - name: Check workflow execution status
+        run: |
+          REPO_OWNER=$(echo "${{ github.repository }}" | cut -d '/' -f 1)
+          REPO_NAME=$(echo "${{ github.repository }}" | cut -d '/' -f 2)
+
+          # Get workflow runs
+          curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+               -H "Accept: application/vnd.github.v3+json" \
+               "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/actions/runs?per_page=10" | \
+          jq '.workflow_runs[] | {id: .id, name: .name, status: .status, conclusion: .conclusion, created_at: .created_at}'
+
+      - name: Create test SARIF file
+        run: |
+          echo '{
+            "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+            "version": "2.1.0",
+            "runs": [
+              {
+                "tool": {
+                  "driver": {
+                    "name": "Test Tool",
+                    "rules": []
+                  }
+                },
+                "results": []
+              }
+            ]
+          }' > test-sarif.json
+
+      - name: Test security events upload
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: test-sarif.json
+          category: 'test'
+
+  test-github-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    if: false  # Set to true only for testing
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create test release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: test-release-${{ github.run_id }}
+          name: Test Release
+          body: This is a test release
+          draft: true
+
+  test-docker-hub:
+    runs-on: ubuntu-latest
+    if: false  # Set to true only for testing
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Test Docker Hub API
+        run: |
+          # Test if we can access Docker Hub API
+          curl -s -u "${{ secrets.DOCKERHUB_USERNAME }}:${{ secrets.DOCKERHUB_TOKEN }}" \
+               "https://hub.docker.com/v2/repositories/${{ secrets.DOCKERHUB_USERNAME }}/"

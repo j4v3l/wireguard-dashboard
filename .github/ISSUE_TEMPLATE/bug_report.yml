@@ -1,0 +1,76 @@
+name: '\U0001F41B Bug Report'
+description: Report a reproducible problem or unexpected behavior
+labels: [bug, needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 🐞 Bug Report
+        Please fill out the form below to help us fix your issue faster!
+  - type: input
+    id: summary
+    attributes:
+      label: "Short summary"
+      description: "A concise description of the bug."
+      placeholder: "e.g. Dashboard fails to start on Docker Compose"
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: "🌎 Environment"
+      description: "Describe your environment (OS, Docker version, image tag, etc.)"
+      placeholder: "e.g. macOS 14.5, Docker 24.0.2, image: j4v3l/wireguard-dashboard:latest"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: "🔢 Steps to Reproduce"
+      description: "How can we reproduce the bug?"
+      placeholder: "1. Run docker-compose up\n2. ..."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: "✅ Expected Behavior"
+      description: "What did you expect to happen?"
+      placeholder: "The dashboard should load successfully."
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: "❌ Actual Behavior"
+      description: "What actually happened?"
+      placeholder: "The dashboard returns a 500 error."
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: "📋 Relevant Logs/Console Output"
+      description: "Paste any error logs or console output."
+      render: shell
+      placeholder: "Paste logs here"
+    validations:
+      required: false
+  - type: textarea
+    id: config
+    attributes:
+      label: "⚙️ Configuration Files"
+      description: "Paste relevant config (docker-compose.yml, env, etc.)"
+      render: yaml
+      placeholder: "Paste config here"
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: "Checklist"
+      options:
+        - label: "I have searched existing issues."
+          required: true
+        - label: "I have attached logs/config if relevant."
+          required: false

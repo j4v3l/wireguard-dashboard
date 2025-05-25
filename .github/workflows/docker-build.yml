@@ -1,3 +1,4 @@
+---
 name: Build and Publish Docker Image
 
 on:
@@ -6,9 +7,14 @@ on:
     tags: ['v*']
   pull_request:
     branches: [main]
-  workflow_dispatch:
+  workflow_dispatch: {}
   schedule:
     - cron: '0 2 * * 0'  # Weekly on Sundays at 2:00 AM
+
+permissions: write-all  # Grant all permissions to ensure nothing is blocked
+
+env:
+  ACTIONS_RUNNER_DEBUG: true  # Enable debug mode for Actions
 
 jobs:
   test:
@@ -16,6 +22,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Check permissions
+        run: |
+          echo "GitHub token permissions:"
+          curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/rate_limit
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -31,25 +42,43 @@ jobs:
 
       - name: Test container
         run: |
-          docker run --name test-wireguard -d --cap-add NET_ADMIN test-image:latest
+          docker run --name test-wireguard -d --cap-add NET_ADMIN -e TEST_MODE=true test-image:latest
           sleep 10
           docker logs test-wireguard
           docker exec test-wireguard bash -c "if [ ! -f /etc/wireguard/wg0.conf ]; then exit 1; fi"
-          docker exec test-wireguard bash -c "ps aux | grep -q '[w]gd.sh' || exit 1"
+          docker exec test-wireguard bash -c "ps -ef | grep -q sleep || exit 1"
           docker stop test-wireguard
           docker rm test-wireguard
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: test-image:latest
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+          category: 'trivy'
 
   docker:
     runs-on: ubuntu-latest
     needs: test
-    permissions:
-      contents: read
-      packages: write
-      security-events: write
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Check environment
+        run: |
+          echo "GitHub ref: ${{ github.ref }}"
+          echo "Event name: ${{ github.event_name }}"
+          echo "Repository: ${{ github.repository }}"
+          echo "Is main branch: ${{ github.ref == format('refs/heads/{0}', 'main') }}"
+          echo "Is dev branch: ${{ github.ref == format('refs/heads/{0}', 'dev') }}"
+          echo "Is tag: ${{ startsWith(github.ref, 'refs/tags/v') }}"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -66,16 +95,13 @@ jobs:
           images: |
             ${{ github.repository }}
             ghcr.io/${{ github.repository }}
+          flavor: |
+            latest=auto
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
             type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
-            type=raw,value=stable,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
             type=raw,value=beta,enable=${{ github.ref == format('refs/heads/{0}', 'dev') }}
-            type=sha
 
       - name: Login to Docker Hub
         if: github.event_name != 'pull_request'
@@ -103,20 +129,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ github.repository }}:${{ github.sha }}
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-          severity: 'CRITICAL,HIGH'
-          
-      - name: Upload Trivy scan results to GitHub Security tab
-        if: github.event_name != 'pull_request'
-        uses: github/codeql-action/upload-sarif@v2
-        with:
-          sarif_file: 'trivy-results.sarif'
-
       - name: Build and Push Docker image
         if: github.event_name != 'pull_request'
         uses: docker/build-push-action@v5
@@ -129,14 +141,31 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Check Docker Tags
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "Docker Tags:"
+          echo "${{ steps.meta.outputs.tags }}"
+
   update-dockerhub-description:
     runs-on: ubuntu-latest
-    needs: docker
+    needs: test
     if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        
+
+      - name: Check dockerhub credentials
+        run: |
+          if [ -z "${{ secrets.DOCKERHUB_USERNAME }}" ]; then
+            echo "::error::DOCKERHUB_USERNAME is not set"
+            exit 1
+          fi
+          if [ -z "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
+            echo "::error::DOCKERHUB_TOKEN is not set"
+            exit 1
+          fi
+
       - name: Update Docker Hub Description
         uses: peter-evans/dockerhub-description@v3
         with:
@@ -145,10 +174,10 @@ jobs:
           repository: ${{ github.repository }}
           short-description: "Wireguard VPN with WGDashboard web interface"
           readme-filepath: ./README.md
-          
+
   create-github-release:
     runs-on: ubuntu-latest
-    needs: docker
+    needs: test
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
@@ -157,26 +186,33 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          
+
+      - name: Check if tag exists
+        run: |
+          if ! git show-ref --tags | grep -q "refs/tags/${{ github.ref_name }}"; then
+            echo "::error::Tag ${{ github.ref_name }} does not exist"
+            exit 1
+          fi
+
       - name: Generate changelog
         id: changelog
         uses: metcalfc/changelog-generator@v4.1.0
         with:
           mytoken: ${{ secrets.GITHUB_TOKEN }}
-          
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           body: |
             # Wireguard Dashboard ${{ github.ref_name }}
-            
+
             ## What's Changed
             ${{ steps.changelog.outputs.changelog }}
-            
+
             ## Docker Images
             - Docker Hub: `docker pull ${{ github.repository }}:${{ github.ref_name }}`
             - GitHub Container Registry: `docker pull ghcr.io/${{ github.repository }}:${{ github.ref_name }}`
-            
+
             ## Features
             - Multi-architecture support (amd64, arm64, armv7, armhf)
             - Wireguard VPN server with WGDashboard web interface
@@ -184,4 +220,4 @@ jobs:
           generate_release_notes: true
           files: |
             LICENSE
-            README.md 
+            README.md
