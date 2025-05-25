@@ -1,0 +1,58 @@
+name: '\U0001F914 Support Question'
+description: Ask for help or clarification
+labels: [question]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 🙋 Support Question
+        Need help? Please fill out this form so we can assist you!
+  - type: input
+    id: question
+    attributes:
+      label: "❓ Question"
+      description: "What do you need help with?"
+      placeholder: "e.g. How do I add a new peer via the dashboard?"
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: "🌎 Environment"
+      description: "Describe your environment (OS, Docker version, image tag, etc.)"
+      placeholder: "e.g. Ubuntu 22.04, Docker 24.0.2, image: j4v3l/wireguard-dashboard:latest"
+    validations:
+      required: false
+  - type: textarea
+    id: tried
+    attributes:
+      label: "🧪 What have you tried?"
+      description: "List any steps you have already tried."
+      placeholder: "e.g. Restarted the container, checked logs, ..."
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: "📋 Relevant Logs/Console Output"
+      description: "Paste any error logs or console output."
+      render: shell
+      placeholder: "Paste logs here"
+    validations:
+      required: false
+  - type: textarea
+    id: config
+    attributes:
+      label: "⚙️ Configuration Files"
+      description: "Paste relevant config (docker-compose.yml, env, etc.)"
+      render: yaml
+      placeholder: "Paste config here"
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: "Checklist"
+      options:
+        - label: "I have searched existing issues and discussions."
+          required: true
