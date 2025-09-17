@@ -7,23 +7,25 @@ if [ "${DEBUG_LOWER}" = "true" ]; then set -x; fi
 
 echo "==================== WIREGUARD NETWORK SETUP ===================="
 
-echo "Enabling IP forwarding..."
-echo 1 >/proc/sys/net/ipv4/ip_forward 2>/dev/null || true
-echo 1 >/proc/sys/net/ipv6/conf/all/forwarding 2>/dev/null || true
+# Detect CI/TEST flags early
+CI_LOWER="${CI:-false}"; CI_LOWER="${CI_LOWER,,}"
+TEST_MODE_LOWER="${TEST_MODE:-false}"; TEST_MODE_LOWER="${TEST_MODE_LOWER,,}"
 
-# Set the MTU if provided (helps with connectivity issues)
-if [ -n "${WG_MTU}" ]; then
-  echo "Setting custom MTU: ${WG_MTU}"
-else
-  # Default to a safe MTU value
-  WG_MTU=1420
-  echo "Using default MTU: ${WG_MTU}"
+echo "Enabling IP forwarding..."
+if [ "${CI_LOWER}" != "true" ] && [ "${TEST_MODE_LOWER}" != "true" ]; then
+  # Use sysctl where possible; ignore failures in constrained environments
+  sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1 || true
+  sysctl -w net.ipv6.conf.all.forwarding=1 >/dev/null 2>&1 || true
 fi
+
+# Set the MTU (safe default if unset)
+WG_MTU="${WG_MTU:-1420}"
+echo "Using MTU: ${WG_MTU}"
 
 MAIN_IF="${MAIN_IF:-eth0}"
 echo "Using main interface: ${MAIN_IF}"
 
-if [ "${CI:-false}" != "true" ] && [ "${TEST_MODE:-false}" != "true" ]; then
+if [ "${CI_LOWER}" != "true" ] && [ "${TEST_MODE_LOWER}" != "true" ]; then
   echo "Configuring iptables rules (idempotent)..."
   add_rule_if_missing() {
     local table="$1";
