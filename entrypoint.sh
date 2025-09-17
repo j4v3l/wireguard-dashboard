@@ -1,17 +1,15 @@
 #!/bin/bash
-set -e
+set -Eeuo pipefail
 
-# Enable more verbose output
-if [ "${DEBUG,,}" = "true" ]; then
-  set -x
-fi
+DEBUG_LOWER="${DEBUG:-false}"
+DEBUG_LOWER="${DEBUG_LOWER,,}"
+if [ "${DEBUG_LOWER}" = "true" ]; then set -x; fi
 
 echo "==================== WIREGUARD NETWORK SETUP ===================="
 
-# Enable IP forwarding (but don't fail if it's not possible in CI environments)
 echo "Enabling IP forwarding..."
-echo 1 >/proc/sys/net/ipv4/ip_forward 2>/dev/null || echo "Cannot modify ip_forward in this environment - this is normal in CI/testing"
-echo 1 >/proc/sys/net/ipv6/conf/all/forwarding 2>/dev/null || echo "Cannot modify ipv6 forwarding in this environment - this is normal in CI/testing"
+echo 1 >/proc/sys/net/ipv4/ip_forward 2>/dev/null || true
+echo 1 >/proc/sys/net/ipv6/conf/all/forwarding 2>/dev/null || true
 
 # Set the MTU if provided (helps with connectivity issues)
 if [ -n "${WG_MTU}" ]; then
@@ -22,45 +20,55 @@ else
   echo "Using default MTU: ${WG_MTU}"
 fi
 
-# Define main interface - explicitly set to eth0
-MAIN_IF="eth0"
-echo "Using main interface: $MAIN_IF"
+MAIN_IF="${MAIN_IF:-eth0}"
+echo "Using main interface: ${MAIN_IF}"
 
-# Reset all iptables rules to ensure clean setup
-if [ "${CI}" != "true" ] && [ "${TEST_MODE}" != "true" ]; then
-  echo "Clearing any existing iptables rules that might interfere..."
-  iptables -F
-  iptables -t nat -F
-  iptables -X
+if [ "${CI:-false}" != "true" ] && [ "${TEST_MODE:-false}" != "true" ]; then
+  echo "Configuring iptables rules (idempotent)..."
+  add_rule_if_missing() {
+    local table="$1";
+    local chain="$2";
+    shift 2;
+    local rule=("$@");
+    if ! iptables -t "$table" -C "$chain" "${rule[@]}" >/dev/null 2>&1; then
+      iptables -t "$table" -A "$chain" "${rule[@]}";
+    fi
+  }
 
-  # Default policies
-  iptables -P INPUT ACCEPT
-  iptables -P FORWARD ACCEPT
-  iptables -P OUTPUT ACCEPT
+  # IPv4 NAT + FORWARD
+  add_rule_if_missing nat POSTROUTING -s 10.0.0.0/24 -o "$MAIN_IF" -j MASQUERADE
+  add_rule_if_missing filter FORWARD -i wg0 -o "$MAIN_IF" -j ACCEPT
+  add_rule_if_missing filter FORWARD -i "$MAIN_IF" -o wg0 -m state --state RELATED,ESTABLISHED -j ACCEPT
 
-  # Setup NAT for internet access through the VPN
-  echo "Setting up NAT for internet access..."
-  # Set up NAT for IPv4 (with logging for easier troubleshooting)
-  iptables -t nat -A POSTROUTING -s 10.0.0.0/24 -o $MAIN_IF -j MASQUERADE
-  iptables -A FORWARD -i wg0 -o $MAIN_IF -j ACCEPT
-  iptables -A FORWARD -i $MAIN_IF -o wg0 -m state --state RELATED,ESTABLISHED -j ACCEPT
+  # IPv6 NAT requires ip6tables and an IPv6 ULA prefix (not enabled by default)
+  if command -v ip6tables >/dev/null 2>&1; then
+    add_rule_if_missing_v6() {
+      local table="$1"; local chain="$2"; shift 2; local rule=("$@");
+      if ! ip6tables -t "$table" -C "$chain" "${rule[@]}" >/dev/null 2>&1; then
+        ip6tables -t "$table" -A "$chain" "${rule[@]}";
+      fi
+    }
+    # Example for fd00::/64 if used; comment left for future IPv6 setup
+    # add_rule_if_missing_v6 nat POSTROUTING -s fd00::/64 -o "$MAIN_IF" -j MASQUERADE
+  fi
 
-  echo "NAT configured for IPv4 - Testing routing tables:"
-  ip route
-  echo "Current iptables NAT rules:"
-  iptables -t nat -L -v
-  echo "Current iptables FORWARD rules:"
-  iptables -L FORWARD -v
+  if [ "${DEBUG_LOWER}" = "true" ]; then
+    echo "Routing table:"; ip route || true
+    echo "NAT rules (v4):"; iptables -t nat -S || true
+    echo "FORWARD rules (v4):"; iptables -S FORWARD || true
+  fi
 fi
 
 # Check for automatic updates
-if [ "${AUTO_UPDATE,,}" = "true" ]; then
+AUTO_UPDATE_LOWER="${AUTO_UPDATE:-false}"; AUTO_UPDATE_LOWER="${AUTO_UPDATE_LOWER,,}"
+if [ "${AUTO_UPDATE_LOWER}" = "true" ]; then
   echo "Automatic updates enabled. Updating packages..."
   apk update
   apk upgrade wireguard-tools
 
   # Update WGDashboard if requested
-  if [ "${UPDATE_DASHBOARD,,}" = "true" ]; then
+  UPDATE_DASHBOARD_LOWER="${UPDATE_DASHBOARD:-false}"; UPDATE_DASHBOARD_LOWER="${UPDATE_DASHBOARD_LOWER,,}"
+  if [ "${UPDATE_DASHBOARD_LOWER}" = "true" ]; then
     echo "Updating WGDashboard..."
     cd /opt/WGDashboard
     git pull
@@ -71,7 +79,7 @@ if [ "${AUTO_UPDATE,,}" = "true" ]; then
 fi
 
 # Load wireguard module if possible (may fail in Docker)
-if lsmod 2>/dev/null; then
+if command -v lsmod >/dev/null 2>&1; then
   if ! lsmod | grep wireguard >/dev/null; then
     echo "Attempting to load wireguard kernel module..."
     modprobe wireguard 2>/dev/null || echo "Wireguard kernel module loading failed, but this may be expected in Docker"
@@ -87,11 +95,12 @@ echo "Using DNS servers: ${DNS_SERVERS}"
 # Create or ensure wg0.conf exists
 if [ ! -f /etc/wireguard/wg0.conf ]; then
   echo "Creating initial wireguard configuration..."
+  umask 077
   wg genkey | tee /etc/wireguard/privatekey | wg pubkey >/etc/wireguard/publickey
   chmod 600 /etc/wireguard/privatekey
 
   # Get server IP from the main interface
-  SERVER_IP=$(ip -4 addr show $MAIN_IF | grep -Po '(?<=inet\s)(\d+\.\d+\.\d+\.\d+)' | head -1)
+  SERVER_IP=$(ip -4 addr show "$MAIN_IF" | awk '/inet /{print $2}' | cut -d/ -f1 | head -1)
 
   if [ -z "$SERVER_IP" ]; then
     # Fallback if we can't get the IP
@@ -115,17 +124,16 @@ EOF
   echo "Server Address: $SERVER_IP"
   echo "MTU: ${WG_MTU}"
   echo "DNS Servers: $DNS_SERVERS"
-  echo "Configuration file:"
-  cat /etc/wireguard/wg0.conf
+  echo "WireGuard configuration created at /etc/wireguard/wg0.conf (content not printed for security)"
 fi
 
 # Check if we're in a test/CI environment
-if [ "${CI}" = "true" ] || [ "${TEST_MODE}" = "true" ]; then
+if [ "${CI:-false}" = "true" ] || [ "${TEST_MODE:-false}" = "true" ]; then
   echo "Running in test/CI mode - skipping WireGuard startup"
 else
   # Start WireGuard (may fail in Docker without proper privileges)
   echo "Starting WireGuard..."
-  (wg-quick up wg0 || echo "WireGuard failed to start. Make sure the container has the NET_ADMIN capability and/or is running in privileged mode.")
+  (wg-quick up wg0 || echo "WireGuard failed to start. Ensure NET_ADMIN capability and privileged mode if required.")
 
   # Show WireGuard status
   echo "==== WireGuard Status ===="
@@ -141,22 +149,24 @@ else
 fi
 
 # Important networking diagnostics
-if [ "${CI}" != "true" ] && [ "${TEST_MODE}" != "true" ]; then
+if [ "${CI:-false}" != "true" ] && [ "${TEST_MODE:-false}" != "true" ]; then
   echo "==== NETWORK DIAGNOSTICS ===="
   echo "IP Configuration:"
-  ip addr
+  ip addr || true
   echo "Routing Table:"
-  ip route
+  ip route || true
   echo "DNS Configuration:"
-  cat /etc/resolv.conf
+  cat /etc/resolv.conf || true
   echo "Testing Internet Connectivity from Container:"
-  ping -c 1 8.8.8.8 || echo "Container cannot reach 8.8.8.8"
-  ping -c 1 google.com || echo "Container cannot resolve or reach google.com"
+  if [ "${DEBUG_LOWER}" = "true" ]; then
+    ping -c 1 8.8.8.8 || echo "Container cannot reach 8.8.8.8"
+    ping -c 1 google.com || echo "Container cannot resolve or reach google.com"
+  fi
 fi
 
 # Start WGDashboard
 echo "Starting WGDashboard..."
-if [ "${CI}" = "true" ] || [ "${TEST_MODE}" = "true" ]; then
+if [ "${CI:-false}" = "true" ] || [ "${TEST_MODE:-false}" = "true" ]; then
   echo "Test mode: Would normally start WGDashboard here"
   # Create a fake process for test detection
   sleep 3600 &
@@ -170,6 +180,8 @@ echo "WGDashboard started successfully at http://localhost:10086"
 echo "Default login - Username: admin / Password: admin"
 echo "NOTE: For Wireguard to work properly, this container must be run with --privileged or --cap-add NET_ADMIN flag"
 
-# Keep container running
 echo "Services started. Container running..."
-tail -f /dev/null
+
+# Propagate signals and keep PID 1 responsive
+trap 'echo "Shutting down..."; cd /opt/WGDashboard/src && ./wgd.sh stop || true; wg-quick down wg0 || true; exit 0' SIGTERM SIGINT
+while :; do sleep 3600 & wait $!; done

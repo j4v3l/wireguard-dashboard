@@ -93,7 +93,7 @@ services:
       - net.ipv6.conf.all.forwarding=1 
 ```
 
-2. Start the container:
+1. Start the container:
 
 ```bash
 docker-compose up -d
@@ -103,7 +103,7 @@ docker-compose up -d
 
 Once the container is running, access the WGDashboard at:
 
-```
+```text
 http://your-server-ip:10086
 ```
 
@@ -127,8 +127,11 @@ Default login credentials:
 | `WG_DASHBOARD_HOST` | `0.0.0.0` | WGDashboard interface binding address |
 | `WG_ALLOWED_IPS` | `0.0.0.0/0, ::/0` | IPs/networks to route through the VPN for clients |
 | `WG_PERSISTENT_KEEPALIVE` | `25` | KeepAlive interval in seconds for NAT traversal |
+| `WG_MTU` | `1420` | MTU for the WireGuard interface. Tuning this can improve throughput on some networks |
+| `WG_DNS_SERVERS` | `1.1.1.1,8.8.8.8` | Comma-separated DNS servers to use in client configs |
 | `AUTO_UPDATE` | `false` | Enable automatic updates of wireguard-tools. Set to `true` to enable |
 | `UPDATE_DASHBOARD` | `false` | Enable automatic updates of WGDashboard. Set to `true` to enable |
+| `DEBUG` | `false` | Enable verbose logging and additional diagnostics |
 
 ## Automatic Updates
 
@@ -246,6 +249,14 @@ To view container logs:
 docker logs wireguard
 # or with docker-compose
 docker-compose logs wireguard
+```
+
+### Healthcheck
+
+This image includes a Docker healthcheck that probes the WGDashboard on port 10086. In Docker Compose, you can see the health status with:
+
+```bash
+docker ps --format '{{.Names}}\t{{.Status}}'
 ```
 
 ## Updates and Maintenance
