@@ -1,0 +1,24 @@
+# Exclude VCS
+.git
+.gitignore
+
+# OS / editor junk
+.DS_Store
+*.swp
+*.swo
+*~
+
+# Local config and runtime data (mounted at runtime; never needed in build context)
+config/
+dashboard-data/
+
+# Backups and dumps
+config/WGDashboard_Backup/
+*.tar
+*.tar.gz
+*.zip
+*.log
+
+# Docker
+Dockerfile.*
+.env

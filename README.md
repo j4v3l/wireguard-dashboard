@@ -21,11 +21,11 @@ A Docker image running Wireguard VPN server with WGDashboard web interface on Al
 
 ## Supported Tags
 
-- `latest` - Latest stable release from the main branch
-- `stable` - Stable release, tagged with version
-- `beta` - Development build from the dev branch
-- `x.y.z` - Specific version releases (e.g., `1.0.0`, `1.2.3`)
-- `linux/amd64`, `linux/arm64`, `linux/arm/v7`, `linux/arm/v6` - Platform-specific images
+- `latest` - Auto-applied on pushes to `main`
+- `stable` - Published on version tags (also applied on `main` builds for convenience)
+- `beta` - Auto-applied on pushes to `dev`
+- `vX.Y.Z` and `X.Y.Z` - Versioned releases (semantic versioning)
+- Multi-arch support: `linux/amd64`, `linux/arm64`, `linux/arm/v7`, `linux/arm/v6`
 
 ## Quick Start
 
@@ -58,8 +58,6 @@ docker run -d \
 1. Create a `docker-compose.yml` file:
 
 ```yaml
-version: '3'
-
 services:
   wireguard:
     image: j4v3l/wireguard-dashboard:beta
@@ -91,9 +89,15 @@ services:
     sysctls:
       - net.ipv4.ip_forward=1
       - net.ipv6.conf.all.forwarding=1 
+    # Optional: pin the embedded WGDashboard version (tag/branch/commit)
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        WGDASHBOARD_REF: master
 ```
 
-2. Start the container:
+1. Start the container:
 
 ```bash
 docker-compose up -d
@@ -103,7 +107,7 @@ docker-compose up -d
 
 Once the container is running, access the WGDashboard at:
 
-```
+```text
 http://your-server-ip:10086
 ```
 
@@ -127,8 +131,11 @@ Default login credentials:
 | `WG_DASHBOARD_HOST` | `0.0.0.0` | WGDashboard interface binding address |
 | `WG_ALLOWED_IPS` | `0.0.0.0/0, ::/0` | IPs/networks to route through the VPN for clients |
 | `WG_PERSISTENT_KEEPALIVE` | `25` | KeepAlive interval in seconds for NAT traversal |
+| `WG_MTU` | `1420` | MTU for the WireGuard interface. Tuning this can improve throughput on some networks |
+| `WG_DNS_SERVERS` | `1.1.1.1,8.8.8.8` | Comma-separated DNS servers to use in client configs |
 | `AUTO_UPDATE` | `false` | Enable automatic updates of wireguard-tools. Set to `true` to enable |
 | `UPDATE_DASHBOARD` | `false` | Enable automatic updates of WGDashboard. Set to `true` to enable |
+| `DEBUG` | `false` | Enable verbose logging and additional diagnostics |
 
 ## Automatic Updates
 
@@ -248,6 +255,14 @@ docker logs wireguard
 docker-compose logs wireguard
 ```
 
+### Healthcheck
+
+This image includes a Docker healthcheck that probes the WGDashboard on port 10086. In Docker Compose, you can see the health status with:
+
+```bash
+docker ps --format '{{.Names}}\t{{.Status}}'
+```
+
 ## Updates and Maintenance
 
 ### Updating the Container
@@ -261,6 +276,18 @@ docker-compose up -d
 # With Docker Compose
 docker-compose pull
 docker-compose up -d
+```
+
+### Release and Tagging
+
+- Push a git tag like `v1.2.3` to trigger a multi-arch build and publish versioned images:
+  - Docker Hub: `j4v3l/wireguard-dashboard:v1.2.3`, plus `stable`
+  - GHCR: `ghcr.io/j4v3l/wireguard-dashboard:v1.2.3`, plus `stable`
+- Merges to `main` publish `latest` (and `stable` as an alias), merges to `dev` publish `beta`.
+- To pin a specific WGDashboard version baked into the image, build with:
+
+```bash
+docker build --build-arg WGDASHBOARD_REF=v4.2.3 -t j4v3l/wireguard-dashboard:v4.2.3 .
 ```
 
 ### Backup

@@ -23,3 +23,15 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+# Never commit WireGuard secrets or configs
+config/privatekey
+config/publickey
+config/wg0.conf
+config/WGDashboard_Backup/
+
+# Archives and logs
+*.tar
+*.tar.gz
+*.zip
+*.log
