@@ -4,7 +4,8 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        WGDASHBOARD_REF: master
+        # Allows pinning WGDashboard to a tag/branch/commit; override via env WGDASHBOARD_REF
+        WGDASHBOARD_REF: "${WGDASHBOARD_REF:-main}"
     image: wireguard-dashboard:local
     container_name: wireguard
     cap_add:
@@ -44,3 +45,7 @@ services:
     dns:
       - 1.1.1.1
       - 8.8.8.8
+
+    labels:
+      - "org.opencontainers.image.title=wireguard-dashboard"
+      - "org.opencontainers.image.version=${IMAGE_VERSION:-dev}"

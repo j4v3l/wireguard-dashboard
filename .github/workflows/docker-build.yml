@@ -4,17 +4,17 @@ name: Build and Publish Docker Image
 on:
   push:
     branches: [main, dev]
-    tags: ['v*']
+    tags: ["v*"]
   pull_request:
     branches: [main]
   workflow_dispatch: {}
   schedule:
-    - cron: '0 2 * * 0'  # Weekly on Sundays at 2:00 AM
+    - cron: "0 2 * * 0" # Weekly on Sundays at 2:00 AM
 
-permissions: write-all  # Grant all permissions to ensure nothing is blocked
+permissions: write-all # Grant all permissions to ensure nothing is blocked
 
 env:
-  ACTIONS_RUNNER_DEBUG: true  # Enable debug mode for Actions
+  ACTIONS_RUNNER_DEBUG: true # Enable debug mode for Actions
 
 jobs:
   test:
@@ -54,15 +54,15 @@ jobs:
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: test-image:latest
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-          severity: 'CRITICAL,HIGH'
+          format: "sarif"
+          output: "trivy-results.sarif"
+          severity: "CRITICAL,HIGH"
 
       - name: Upload Trivy scan results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: 'trivy-results.sarif'
-          category: 'trivy'
+          sarif_file: "trivy-results.sarif"
+          category: "trivy"
 
   docker:
     runs-on: ubuntu-latest
@@ -83,7 +83,7 @@ jobs:
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
         with:
-          platforms: 'arm64,arm'
+          platforms: "arm64,arm"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -102,6 +102,8 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
             type=raw,value=beta,enable=${{ github.ref == format('refs/heads/{0}', 'dev') }}
+            type=semver,pattern=v{{version}}
+            type=raw,value=stable,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
 
       - name: Login to Docker Hub
         if: github.event_name != 'pull_request'

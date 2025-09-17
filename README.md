@@ -21,11 +21,11 @@ A Docker image running Wireguard VPN server with WGDashboard web interface on Al
 
 ## Supported Tags
 
-- `latest` - Latest stable release from the main branch
-- `stable` - Stable release, tagged with version
-- `beta` - Development build from the dev branch
-- `x.y.z` - Specific version releases (e.g., `1.0.0`, `1.2.3`)
-- `linux/amd64`, `linux/arm64`, `linux/arm/v7`, `linux/arm/v6` - Platform-specific images
+- `latest` - Auto-applied on pushes to `main`
+- `stable` - Published on version tags (also applied on `main` builds for convenience)
+- `beta` - Auto-applied on pushes to `dev`
+- `vX.Y.Z` and `X.Y.Z` - Versioned releases (semantic versioning)
+- Multi-arch support: `linux/amd64`, `linux/arm64`, `linux/arm/v7`, `linux/arm/v6`
 
 ## Quick Start
 
@@ -58,8 +58,6 @@ docker run -d \
 1. Create a `docker-compose.yml` file:
 
 ```yaml
-version: '3'
-
 services:
   wireguard:
     image: j4v3l/wireguard-dashboard:beta
@@ -91,6 +89,12 @@ services:
     sysctls:
       - net.ipv4.ip_forward=1
       - net.ipv6.conf.all.forwarding=1 
+    # Optional: pin the embedded WGDashboard version (tag/branch/commit)
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        WGDASHBOARD_REF: master
 ```
 
 1. Start the container:
@@ -272,6 +276,18 @@ docker-compose up -d
 # With Docker Compose
 docker-compose pull
 docker-compose up -d
+```
+
+### Release and Tagging
+
+- Push a git tag like `v1.2.3` to trigger a multi-arch build and publish versioned images:
+  - Docker Hub: `j4v3l/wireguard-dashboard:v1.2.3`, plus `stable`
+  - GHCR: `ghcr.io/j4v3l/wireguard-dashboard:v1.2.3`, plus `stable`
+- Merges to `main` publish `latest` (and `stable` as an alias), merges to `dev` publish `beta`.
+- To pin a specific WGDashboard version baked into the image, build with:
+
+```bash
+docker build --build-arg WGDASHBOARD_REF=v4.2.3 -t j4v3l/wireguard-dashboard:v4.2.3 .
 ```
 
 ### Backup
